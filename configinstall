@@ -1,0 +1,41 @@
+#!/bin/bash
+pluginpath="$(dirname "$(readlink -f $0)")"
+mkdir -pv "$pluginpath/utils"
+cd "$pluginpath/utils"
+[ -e "$pluginpath/rc.local" ] || touch "$pluginpath/rc.local"
+
+for name in *; do
+cut -d' ' -f1 "$pluginpath/rc" "$pluginpath/rc.local" | fgrep -q "$name" || {
+        echo "removing $name"
+        rm -rf $name
+    }
+done
+
+cat "$pluginpath/rc" "$pluginpath/rc.local" | while read line; do
+name="$(echo "$line" | cut -d' ' -f1)"
+    url="$(echo "$line" | cut -d' ' -f2)"
+    upstream="$(echo "$line" | cut -d' ' -f3)"
+    if [ -d "$name" ]; then (
+        cd "$name" && echo -n "$name: " && {
+            git pull
+            [ -n "$upstream" ] && git pull "$upstream"
+        }
+    )
+    else
+git clone "$url" "$name"
+        (
+            cd "$name"
+            branch="$(echo "$url#" | cut -d'#' -f2)"
+            [ -n "$branch" ] && git checkout "$branch"
+            [ -n "$upstream" ] && git pull "$upstream" $(echo "$upstream#" | cut -d'#' -f2)
+        )
+    fi
+done
+
+for plugin in *; do
+    (
+        cd "$plugin"
+        git submodule update --init --recursive
+    )
+    [ -x "$plugin/configinstall" ] && "$plugin/configinstall"
+done
